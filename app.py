@@ -1,0 +1,451 @@
+# -*- coding: utf-8 -*-
+"""
+缠论选股系统 - Streamlit Web App
+支持自定义股票池 + 板块自动扫描
+"""
+
+import streamlit as st
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+import tushare as ts
+
+# ========== 页面配置 ==========
+st.set_page_config(
+    page_title="缠论选股系统",
+    page_icon="📈",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# ========== Tushare初始化 ==========
+# 从环境变量读取Token（部署到云端时设置）
+TUSHARE_TOKEN = os.environ.get('TUSHARE_TOKEN', '')
+
+if not TUSHARE_TOKEN:
+    st.error("⚠️ 未设置TUSHARE_TOKEN环境变量！请在Streamlit Cloud设置中添加。")
+    st.stop()
+
+pro = ts.pro_api(TUSHARE_TOKEN)
+
+# ========== CSS样式 ==========
+st.markdown("""
+<style>
+.main {
+    padding: 0rem 1rem;
+}
+.metric-card {
+    background-color: #f0f2f6;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    margin: 0.5rem 0;
+}
+.stock-card {
+    background-color: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 0.5rem 0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.buy-signal {
+    background-color: #e8f5e9;
+    border-left: 4px solid #4caf50;
+}
+.buy-1 {
+    background-color: #fff3e0;
+    border-left: 4px solid #ff9800;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ========== 缠论核心算法 ==========
+
+def handle_inclusion(df):
+    """K线包含处理"""
+    if df.empty:
+        return df
+    
+    df = df.copy()
+    df.columns = [str(col).lower() for col in df.columns]
+    processed_candles = []
+    i = 0
+    
+    while i < len(df):
+        current_candle = df.iloc[i].copy()
+        j = i + 1
+        
+        while j < len(df):
+            next_candle = df.iloc[j]
+            is_included = (next_candle['high'] >= current_candle['high'] and 
+                          next_candle['low'] <= current_candle['low'])
+            is_including = (next_candle['high'] <= current_candle['high'] and 
+                           next_candle['low'] >= current_candle['low'])
+            
+            if is_included or is_including:
+                current_candle['high'] = max(current_candle['high'], next_candle['high'])
+                current_candle['low'] = min(current_candle['low'], next_candle['low'])
+                current_candle['open'] = next_candle['open']
+                current_candle['close'] = next_candle['close']
+                j += 1
+            else:
+                break
+        
+        processed_candles.append(current_candle)
+        i = j
+    
+    return pd.DataFrame(processed_candles)
+
+def is_top_fractal(df, idx):
+    """顶分型判断"""
+    if idx < 2 or idx >= len(df):
+        return False
+    p2 = df.iloc[idx-1]
+    p1 = df.iloc[idx-2]
+    p3 = df.iloc[idx]
+    return (p2['high'] > p1['high'] and p2['high'] > p3['high'] and 
+            p2['low'] > p1['low'] and p2['low'] > p3['low'])
+
+def is_bottom_fractal(df, idx):
+    """底分型判断"""
+    if idx < 2 or idx >= len(df):
+        return False
+    p2 = df.iloc[idx-1]
+    p1 = df.iloc[idx-2]
+    p3 = df.iloc[idx]
+    return (p2['low'] < p1['low'] and p2['low'] < p3['low'] and 
+            p2['high'] < p1['high'] and p2['high'] < p3['high'])
+
+def find_strokes(df):
+    """寻找缠论笔"""
+    if df.empty or len(df) < 5:
+        return [], 0, 0
+    
+    strokes = []
+    fractals = []
+    ding_count = 0
+    di_count = 0
+    
+    for i in range(2, len(df)):
+        if is_top_fractal(df, i):
+            fractals.append({'idx': i-1, 'type': 'top', 'price': df.iloc[i-1]['high']})
+            ding_count += 1
+        elif is_bottom_fractal(df, i):
+            fractals.append({'idx': i-1, 'type': 'bottom', 'price': df.iloc[i-1]['low']})
+            di_count += 1
+    
+    if len(fractals) < 2:
+        return strokes, ding_count, di_count
+    
+    current_stroke_start = None
+    for i in range(len(fractals)):
+        current_fractal = fractals[i]
+        if current_stroke_start is None:
+            current_stroke_start = current_fractal
+        else:
+            if current_fractal['type'] != current_stroke_start['type']:
+                if current_fractal['idx'] - current_stroke_start['idx'] >= 2:
+                    if (current_stroke_start['type'] == 'bottom' and 
+                        current_fractal['type'] == 'top' and 
+                        current_fractal['price'] > current_stroke_start['price']):
+                        strokes.append({'type': 'up', 'start': current_stroke_start['price'], 'end': current_fractal['price']})
+                        current_stroke_start = current_fractal
+                    elif (current_stroke_start['type'] == 'top' and 
+                          current_fractal['type'] == 'bottom' and 
+                          current_fractal['price'] < current_stroke_start['price']):
+                        strokes.append({'type': 'down', 'start': current_stroke_start['price'], 'end': current_fractal['price']})
+                        current_stroke_start = current_fractal
+                    else:
+                        current_stroke_start = current_fractal
+                else:
+                    current_stroke_start = current_fractal
+            else:
+                if ((current_fractal['type'] == 'top' and current_fractal['price'] > current_stroke_start['price']) or
+                    (current_fractal['type'] == 'bottom' and current_fractal['price'] < current_stroke_start['price'])):
+                    current_stroke_start = current_fractal
+    
+    return strokes, ding_count, di_count
+
+def calculate_zhongshu(df):
+    """计算中枢"""
+    df['mid'] = (df['high'] + df['low']) / 2
+    return {
+        'low': df['mid'].quantile(0.40),
+        'high': df['mid'].quantile(0.60),
+    }
+
+def analyze_stock(symbol, name, days=90):
+    """分析单只股票"""
+    try:
+        # 获取数据
+        if symbol.startswith('6'):
+            ts_code = f"{symbol}.SH"
+        else:
+            ts_code = f"{symbol}.SZ"
+        
+        end_date = datetime.now().strftime('%Y%m%d')
+        start_date = (datetime.now() - timedelta(days=days*2)).strftime('%Y%m%d')
+        df = pro.daily(ts_code=ts_code, start_date=start_date, end_date=end_date)
+        
+        if df is None or len(df) < 20:
+            return None
+        
+        df = df.sort_values('trade_date').reset_index(drop=True)
+        df = df.rename(columns={
+            'trade_date': 'date', 'open': 'open', 'close': 'close',
+            'high': 'high', 'low': 'low', 'vol': 'volume', 'pct_chg': 'pct_chg'
+        })
+        df = df.tail(days)
+        
+        # 计算指标
+        current_price = df.iloc[-1]['close']
+        current_chg = df.iloc[-1]['pct_chg']
+        max_price = df['high'].max()
+        min_price = df['low'].min()
+        
+        # 缠论分析
+        df_processed = handle_inclusion(df.reset_index(drop=True))
+        strokes, ding_count, di_count = find_strokes(df_processed)
+        zhongshu = calculate_zhongshu(df)
+        
+        # 判断信号
+        signal = "无"
+        if current_price > zhongshu['high'] and strokes:
+            recent_up = [s for s in strokes if s['type'] == 'up']
+            if recent_up and recent_up[-1]['end'] > zhongshu['high']:
+                signal = "三买"
+        elif current_price < zhongshu['low'] and strokes:
+            recent_down = [s for s in strokes if s['type'] == 'down']
+            if recent_down:
+                recent_low = recent_down[-1]['end']
+                rebound_pct = (current_price - recent_low) / recent_low * 100
+                if rebound_pct > 1:
+                    signal = "一买"
+        
+        return {
+            'code': symbol, 'name': name, 'price': current_price, 'change': current_chg,
+            'max_price': max_price, 'min_price': min_price,
+            'ding_count': ding_count, 'di_count': di_count, 'stroke_count': len(strokes),
+            'zhongshu_low': zhongshu['low'], 'zhongshu_high': zhongshu['high'],
+            'signal': signal
+        }
+    except Exception as e:
+        return None
+
+def get_concept_stocks(concept_name):
+    """获取板块成分股"""
+    try:
+        concepts = pro.concept()
+        matched = concepts[concepts['name'].str.contains(concept_name, na=False, case=False)]
+        
+        if matched.empty:
+            return None
+        
+        concept_code = matched.iloc[0]['code']
+        detail = pro.concept_detail(id=concept_code, fields='ts_code,name')
+        
+        if detail is None or detail.empty:
+            return None
+        
+        stock_list = []
+        for _, row in detail.iterrows():
+            symbol = row['ts_code'].split('.')[0]
+            stock_list.append((symbol, row['name']))
+        
+        return stock_list
+    except:
+        return None
+
+# ========== 页面主逻辑 ==========
+
+def main():
+    # 标题
+    st.title("📈 缠论选股系统 v3.0")
+    st.markdown("**智能缠论分析 | 自定义股票池 | 板块自动扫描**")
+    
+    # 侧边栏配置
+    st.sidebar.header("⚙️ 分析配置")
+    
+    # 股票池选择方式
+    pool_mode = st.sidebar.radio(
+        "股票池选择方式",
+        ["自定义股票池", "板块自动扫描"],
+        help="选择自定义股票池手动输入股票，或选择板块自动获取成分股"
+    )
+    
+    stock_list = []
+    
+    if pool_mode == "自定义股票池":
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("📝 自定义股票池")
+        
+        # 预设股票池
+        presets = {
+            "光模块": "300308,300502,300394,603083,000988,002281,300548,688498",
+            "白酒": "600519,000858,000568,002304,000596,603369,600809,600702",
+            "新能源": "300750,002594,601012,603659,300014,002812,300073,002709",
+            "银行": "000001,600000,601398,601288,601939,601988,601328,601166",
+            "清空": ""
+        }
+        
+        preset = st.sidebar.selectbox("快速选择预设", list(presets.keys()))
+        
+        custom_input = st.sidebar.text_area(
+            "输入股票代码（逗号分隔）",
+            value=presets[preset],
+            height=100,
+            help="格式：000001,000002,600519 或带名称：000001平安银行,000002万科A"
+        )
+        
+        # 解析输入
+        if custom_input.strip():
+            items = [x.strip() for x in custom_input.split(",")]
+            for item in items:
+                if item:
+                    # 尝试提取代码和名称
+                    code = ''.join(filter(str.isdigit, item))
+                    name = ''.join(filter(lambda x: not x.isdigit(), item)).strip()
+                    if len(code) == 6:
+                        stock_list.append((code, name if name else f"股票{code}"))
+        
+        st.sidebar.info(f"已添加 {len(stock_list)} 只股票")
+        
+    else:
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("🔍 板块自动扫描")
+        
+        # 常用概念列表
+        common_concepts = ["光纤", "芯片", "人工智能", "新能源", "半导体", "军工", "医药", "白酒", "银行", "证券"]
+        concept_name = st.sidebar.selectbox("选择概念板块", common_concepts)
+        
+        if st.sidebar.button("🔄 获取成分股"):
+            with st.spinner(f"正在获取 {concept_name} 板块成分股..."):
+                concept_stocks = get_concept_stocks(concept_name)
+                if concept_stocks:
+                    st.session_state['concept_stocks'] = concept_stocks
+                    st.sidebar.success(f"获取到 {len(concept_stocks)} 只成分股")
+                else:
+                    st.sidebar.error("未找到该板块成分股")
+        
+        if 'concept_stocks' in st.session_state:
+            stock_list = st.session_state['concept_stocks']
+            st.sidebar.info(f"当前板块: {len(stock_list)} 只股票")
+    
+    # 分析参数
+    st.sidebar.markdown("---")
+    days = st.sidebar.slider("分析天数", 30, 180, 90)
+    
+    # 开始分析
+    st.sidebar.markdown("---")
+    if st.sidebar.button("🚀 开始分析", type="primary", use_container_width=True):
+        if not stock_list:
+            st.error("请先添加股票或选择板块！")
+            return
+        
+        # 分析进度
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        results = []
+        for i, (symbol, name) in enumerate(stock_list):
+            progress = (i + 1) / len(stock_list)
+            progress_bar.progress(progress)
+            status_text.text(f"分析中... {symbol} {name} ({i+1}/{len(stock_list)})")
+            
+            result = analyze_stock(symbol, name, days)
+            if result:
+                results.append(result)
+        
+        progress_bar.empty()
+        status_text.empty()
+        
+        # 保存结果
+        st.session_state['results'] = results
+    
+    # 显示结果
+    if 'results' in st.session_state:
+        results = st.session_state['results']
+        
+        # 统计
+        col1, col2, col3, col4 = st.columns(4)
+        buy3 = [r for r in results if r['signal'] == '三买']
+        buy1 = [r for r in results if r['signal'] == '一买']
+        
+        col1.metric("📊 分析股票", len(results))
+        col2.metric("🚀 三买信号", len(buy3), delta="强势突破")
+        col3.metric("📉 一买信号", len(buy1), delta="底部反转")
+        col4.metric("❌ 无信号", len(results) - len(buy3) - len(buy1))
+        
+        st.markdown("---")
+        
+        # 三买信号股票
+        if buy3:
+            st.subheader("🎯 三买信号 - 强势突破")
+            for r in buy3:
+                with st.container():
+                    cols = st.columns([2, 1, 1, 1, 1])
+                    cols[0].markdown(f"**{r['code']}** {r['name']}")
+                    cols[1].metric("价格", f"¥{r['price']:.2f}", f"{r['change']:+.2f}%")
+                    cols[2].write(f"中枢: ¥{r['zhongshu_low']:.1f}-{r['zhongshu_high']:.1f}")
+                    cols[3].write(f"笔数: {r['stroke_count']}")
+                    cols[4].success("三买")
+        
+        # 一买信号股票
+        if buy1:
+            st.subheader("📉 一买信号 - 底部反转")
+            for r in buy1:
+                with st.container():
+                    cols = st.columns([2, 1, 1, 1, 1])
+                    cols[0].markdown(f"**{r['code']}** {r['name']}")
+                    cols[1].metric("价格", f"¥{r['price']:.2f}", f"{r['change']:+.2f}%")
+                    cols[2].write(f"中枢下沿: ¥{r['zhongshu_low']:.1f}")
+                    cols[3].write(f"笔数: {r['stroke_count']}")
+                    cols[4].warning("一买")
+        
+        # 完整数据表
+        st.markdown("---")
+        st.subheader("📋 完整分析数据")
+        
+        df_results = pd.DataFrame(results)
+        df_results['区间'] = df_results.apply(lambda x: f"{x['min_price']:.1f}-{x['max_price']:.1f}", axis=1)
+        df_display = df_results[['code', 'name', 'price', 'change', 'signal', 'stroke_count', 'ding_count', 'di_count', '区间']]
+        df_display.columns = ['代码', '名称', '价格', '涨跌%', '信号', '笔数', '顶分型', '底分型', '区间']
+        
+        st.dataframe(df_display, use_container_width=True, height=400)
+        
+        # 导出按钮
+        csv = df_display.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 导出CSV",
+            data=csv,
+            file_name=f"缠论分析_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv"
+        )
+    else:
+        # 欢迎页面
+        st.info("👈 请在左侧配置股票池，然后点击「开始分析」")
+        
+        st.markdown("""
+        ### 🎯 使用指南
+        
+        **1. 自定义股票池**
+        - 选择预设模板（光模块、白酒、新能源等）
+        - 或手动输入股票代码，格式：`000001,000002,600519`
+        - 也可带名称：`000001平安银行,000002万科A`
+        
+        **2. 板块自动扫描**
+        - 选择概念板块（如"光纤"、"芯片"）
+        - 自动获取该板块所有成分股
+        - 一键分析整个板块
+        
+        **3. 分析结果**
+        - 🚀 三买：强势突破，关注买入机会
+        - 📉 一买：底部反转，可能止跌反弹
+        - 支持导出CSV数据
+        
+        ### ⚠️ 风险提示
+        本工具仅供学习研究使用，不构成投资建议。股市有风险，投资需谨慎。
+        """)
+
+if __name__ == "__main__":
+    main()
