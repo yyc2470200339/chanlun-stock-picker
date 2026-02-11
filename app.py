@@ -86,7 +86,7 @@ def load_analysis_history():
 # ========== 生成结果图片 ==========
 
 def generate_result_image(results):
-    """生成分析结果图片"""
+    """生成分析结果图片 - 优化手机浏览"""
     if not results:
         return None
     
@@ -94,72 +94,96 @@ def generate_result_image(results):
     buy3 = [r for r in results if r['signal'] == '三买']
     buy1 = [r for r in results if r['signal'] == '一买']
     
-    # 创建图片
-    fig, ax = plt.subplots(figsize=(10, 6 + len(buy3 + buy1) * 0.8))
+    # 如果没有信号股票，不生成图片
+    if not buy3 and not buy1:
+        return None
+    
+    # 设置中文字体 - 尝试多种字体
+    import matplotlib
+    matplotlib.rcParams['font.sans-serif'] = [
+        'SimHei', 'DejaVu Sans', 'Arial Unicode MS', 
+        'WenQuanYi Micro Hei', 'Noto Sans CJK SC'
+    ]
+    matplotlib.rcParams['axes.unicode_minus'] = False
+    
+    # 计算图片高度 - 紧凑布局
+    signal_count = len(buy3) + len(buy1)
+    fig_height = 3 + signal_count * 0.6  # 紧凑行距
+    
+    # 创建图片 - 适合手机宽度
+    fig, ax = plt.subplots(figsize=(8, fig_height))
     ax.axis('off')
     
+    # 颜色定义
+    color_title = '#1f77b4'
+    color_green = '#2ecc71'
+    color_orange = '#f39c12'
+    color_gray = '#7f8c8d'
+    color_dark = '#2c3e50'
+    
     # 标题
-    fig.text(0.5, 0.95, '📈 缠论选股分析结果', ha='center', va='top', 
-             fontsize=20, fontweight='bold', color='#1f77b4')
-    fig.text(0.5, 0.92, f'生成时间: {datetime.now().strftime("%Y-%m-%d %H:%M")}', 
-             ha='center', va='top', fontsize=10, color='gray')
+    fig.text(0.5, 0.98, '缠论选股分析结果', ha='center', va='top', 
+             fontsize=16, fontweight='bold', color=color_title)
+    fig.text(0.5, 0.95, datetime.now().strftime('%Y-%m-%d %H:%M'), 
+             ha='center', va='top', fontsize=9, color=color_gray)
     
-    # 统计信息
-    y_pos = 0.88
-    fig.text(0.1, y_pos, f'📊 分析股票: {len(results)}只', fontsize=12)
-    fig.text(0.4, y_pos, f'🚀 三买信号: {len(buy3)}只', fontsize=12, color='green')
-    fig.text(0.7, y_pos, f'📉 一买信号: {len(buy1)}只', fontsize=12, color='orange')
+    # 统计信息 - 紧凑排列
+    y_pos = 0.92
+    stats_text = f'分析:{len(results)}只 | 三买:{len(buy3)}只 | 一买:{len(buy1)}只'
+    fig.text(0.5, y_pos, stats_text, ha='center', va='top', 
+             fontsize=10, color=color_dark)
     
-    y_pos -= 0.08
+    y_pos -= 0.06
     
     # 三买股票
     if buy3:
-        fig.text(0.1, y_pos, '🎯 三买信号 - 强势突破', fontsize=14, fontweight='bold', color='green')
-        y_pos -= 0.05
+        fig.text(0.05, y_pos, '【三买信号-强势突破】', fontsize=11, 
+                fontweight='bold', color=color_green)
+        y_pos -= 0.04
         
         for r in buy3:
-            # 股票名称和价格
-            fig.text(0.1, y_pos, f"{r['code']} {r['name']}", fontsize=11, fontweight='bold')
-            fig.text(0.4, y_pos, f"¥{r['price']:.2f} ({r['change']:+.2f}%)", fontsize=11)
+            # 股票信息 - 单行紧凑显示
+            line1 = f"{r['code']} {r['name']}  ¥{r['price']:.2f} ({r['change']:+.1f}%)"
+            fig.text(0.05, y_pos, line1, fontsize=10, fontweight='bold', color=color_dark)
+            y_pos -= 0.025
             
-            # 买卖点
-            y_pos -= 0.04
-            stop_str = f"止损: ¥{r.get('stop_loss', 0):.2f} ({r.get('stop_loss_pct', 0):+.1f}%)" if r.get('stop_loss') else ""
-            target_str = f"目标: ¥{r.get('target_price', 0):.2f} (+{r.get('target_pct', 0):.1f}%)" if r.get('target_price') else ""
-            fig.text(0.15, y_pos, f"操作建议: {r.get('action', '-')} | {stop_str} | {target_str}", 
-                    fontsize=9, color='#666')
-            
-            y_pos -= 0.035
+            # 买卖点 - 简化显示
+            stop_str = f"¥{r.get('stop_loss', 0):.1f}({r.get('stop_loss_pct', 0):+.0f}%)" if r.get('stop_loss') else "-"
+            target_str = f"¥{r.get('target_price', 0):.1f}(+{r.get('target_pct', 0):.0f}%)" if r.get('target_price') else "-"
+            line2 = f"    买入:¥{r['price']:.1f} → 止损:{stop_str} → 目标:{target_str}"
+            fig.text(0.05, y_pos, line2, fontsize=8, color=color_gray)
+            y_pos -= 0.03
     
     # 一买股票
     if buy1:
-        y_pos -= 0.02
-        fig.text(0.1, y_pos, '📉 一买信号 - 底部反转', fontsize=14, fontweight='bold', color='orange')
-        y_pos -= 0.05
+        y_pos -= 0.01
+        fig.text(0.05, y_pos, '【一买信号-底部反转】', fontsize=11, 
+                fontweight='bold', color=color_orange)
+        y_pos -= 0.04
         
         for r in buy1:
-            # 股票名称和价格
-            fig.text(0.1, y_pos, f"{r['code']} {r['name']}", fontsize=11, fontweight='bold')
-            fig.text(0.4, y_pos, f"¥{r['price']:.2f} ({r['change']:+.2f}%)", fontsize=11)
+            # 股票信息
+            line1 = f"{r['code']} {r['name']}  ¥{r['price']:.2f} ({r['change']:+.1f}%)"
+            fig.text(0.05, y_pos, line1, fontsize=10, fontweight='bold', color=color_dark)
+            y_pos -= 0.025
             
             # 买卖点
-            y_pos -= 0.04
-            stop_str = f"止损: ¥{r.get('stop_loss', 0):.2f} ({r.get('stop_loss_pct', 0):+.1f}%)" if r.get('stop_loss') else ""
-            target_str = f"目标: ¥{r.get('target_price', 0):.2f} (+{r.get('target_pct', 0):.1f}%)" if r.get('target_price') else ""
-            fig.text(0.15, y_pos, f"操作建议: {r.get('action', '-')} | {stop_str} | {target_str}", 
-                    fontsize=9, color='#666')
-            
-            y_pos -= 0.035
+            stop_str = f"¥{r.get('stop_loss', 0):.1f}({r.get('stop_loss_pct', 0):+.0f}%)" if r.get('stop_loss') else "-"
+            target_str = f"¥{r.get('target_price', 0):.1f}(+{r.get('target_pct', 0):.0f}%)" if r.get('target_price') else "-"
+            line2 = f"    买入:¥{r['price']:.1f} → 止损:{stop_str} → 目标:{target_str}"
+            fig.text(0.05, y_pos, line2, fontsize=8, color=color_gray)
+            y_pos -= 0.03
     
     # 风险提示
-    y_pos -= 0.03
-    fig.text(0.5, y_pos, '⚠️ 风险提示：以上分析仅供参考，不构成投资建议。股市有风险，投资需谨慎。', 
-             ha='center', fontsize=9, color='red', style='italic')
+    y_pos -= 0.02
+    fig.text(0.5, max(y_pos, 0.02), 
+             '风险提示:以上分析仅供参考，不构成投资建议。', 
+             ha='center', fontsize=7, color='#e74c3c', style='italic')
     
-    # 保存为图片
+    # 保存为图片 - 高DPI保证清晰度
     buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=150, bbox_inches='tight', 
-                facecolor='white', edgecolor='none')
+    plt.savefig(buf, format='png', dpi=200, bbox_inches='tight', 
+                facecolor='white', edgecolor='none', pad_inches=0.1)
     buf.seek(0)
     plt.close()
     
