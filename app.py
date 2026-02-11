@@ -706,95 +706,119 @@ def main():
         if buy3:
             st.subheader("🎯 三买信号 - 强势突破")
             for r in buy3:
+                # 使用卡片容器，一屏显示完整信息
                 with st.container():
-                    cols = st.columns([2, 1, 1, 1, 1])
-                    cols[0].markdown(f"**{r['code']}** {r['name']}")
-                    cols[1].metric("价格", f"¥{r['price']:.2f}", f"{r['change']:+.2f}%")
+                    # 顶部：股票基本信息 + 自选按钮
+                    header_cols = st.columns([3, 1, 1])
                     
-                    # 加入自选按钮
-                    watchlist = load_watchlist()
-                    is_in_watchlist = any(w['code'] == r['code'] for w in watchlist)
-                    if is_in_watchlist:
-                        cols[4].markdown("✅ 已自选")
-                    else:
-                        if cols[4].button("⭐ 自选", key=f"watch_{r['code']}"):
-                            if add_to_watchlist(r['code'], r['name']):
-                                st.success(f"已添加 {r['name']} 到自选")
-                                st.rerun()
+                    with header_cols[0]:
+                        # 股票代码名称 + 价格 + 涨跌幅
+                        price_color = "🔴" if r['change'] > 0 else "🟢" if r['change'] < 0 else "⚪"
+                        st.markdown(f"**{r['code']} {r['name']}**  {price_color} ¥{r['price']:.2f} ({r['change']:+.2f}%)")
                     
-                    cols[4].success("三买")
-                
-                # 展开显示买卖点
-                with st.expander(f"💡 买卖点详情", expanded=True):
-                    advice_cols = st.columns(4)
+                    with header_cols[1]:
+                        st.success("三买", icon="🚀")
                     
-                    with advice_cols[0]:
-                        st.markdown("**🎯 操作建议**")
-                        st.success(r['action'])
-                        st.caption(r.get('suggestion', ''))
+                    with header_cols[2]:
+                        # 自选按钮
+                        watchlist = load_watchlist()
+                        is_in_watchlist = any(w['code'] == r['code'] for w in watchlist)
+                        if is_in_watchlist:
+                            st.caption("✅ 已自选")
+                        else:
+                            if st.button("⭐ 自选", key=f"watch_{r['code']}", use_container_width=True):
+                                if add_to_watchlist(r['code'], r['name']):
+                                    st.success("已添加")
+                                    st.rerun()
                     
-                    with advice_cols[1]:
-                        st.markdown("**💰 买入价**")
+                    # 中间：买卖点详情（紧凑布局）
+                    st.markdown("---")
+                    detail_cols = st.columns(4)
+                    
+                    with detail_cols[0]:
+                        st.markdown("🎯 **建议**")
+                        st.markdown(f"{r['action']}")
+                        st.caption(r.get('suggestion', '')[:12] + "..." if len(r.get('suggestion', '')) > 12 else r.get('suggestion', ''))
+                    
+                    with detail_cols[1]:
+                        st.markdown("💰 **买入**")
                         st.markdown(f"¥{r['price']:.2f}")
                     
-                    with advice_cols[2]:
-                        st.markdown("**🛑 止损价**")
+                    with detail_cols[2]:
+                        st.markdown("🛑 **止损**")
                         if r.get('stop_loss'):
                             st.markdown(f"¥{r['stop_loss']:.2f}")
-                            st.caption(f"({r['stop_loss_pct']:+.1f}%)")
+                            st.caption(f"{r['stop_loss_pct']:+.1f}%")
+                        else:
+                            st.markdown("-")
                     
-                    with advice_cols[3]:
-                        st.markdown("**🎯 目标价**")
+                    with detail_cols[3]:
+                        st.markdown("🎯 **目标**")
                         if r.get('target_price'):
                             st.markdown(f"¥{r['target_price']:.2f}")
-                            st.caption(f"(+{r['target_pct']:.1f}%)")
+                            st.caption(f"+{r['target_pct']:.1f}%")
+                        else:
+                            st.markdown("-")
+                    
+                    st.markdown("---")
         
         # 一买信号股票
         if buy1:
             st.subheader("📉 一买信号 - 底部反转")
             for r in buy1:
+                # 使用卡片容器
                 with st.container():
-                    cols = st.columns([2, 1, 1, 1, 1])
-                    cols[0].markdown(f"**{r['code']}** {r['name']}")
-                    cols[1].metric("价格", f"¥{r['price']:.2f}", f"{r['change']:+.2f}%")
+                    # 顶部：股票基本信息 + 自选按钮
+                    header_cols = st.columns([3, 1, 1])
                     
-                    # 加入自选按钮
-                    watchlist = load_watchlist()
-                    is_in_watchlist = any(w['code'] == r['code'] for w in watchlist)
-                    if is_in_watchlist:
-                        cols[4].markdown("✅ 已自选")
-                    else:
-                        if cols[4].button("⭐ 自选", key=f"watch_{r['code']}"):
-                            if add_to_watchlist(r['code'], r['name']):
-                                st.success(f"已添加 {r['name']} 到自选")
-                                st.rerun()
+                    with header_cols[0]:
+                        price_color = "🔴" if r['change'] > 0 else "🟢" if r['change'] < 0 else "⚪"
+                        st.markdown(f"**{r['code']} {r['name']}**  {price_color} ¥{r['price']:.2f} ({r['change']:+.2f}%)")
                     
-                    cols[4].warning("一买")
-                
-                # 展开显示买卖点
-                with st.expander(f"💡 买卖点详情", expanded=True):
-                    advice_cols = st.columns(4)
+                    with header_cols[1]:
+                        st.warning("一买", icon="📉")
                     
-                    with advice_cols[0]:
-                        st.markdown("**🎯 操作建议**")
-                        st.warning(r['action'])
-                        st.caption(r.get('suggestion', ''))
+                    with header_cols[2]:
+                        watchlist = load_watchlist()
+                        is_in_watchlist = any(w['code'] == r['code'] for w in watchlist)
+                        if is_in_watchlist:
+                            st.caption("✅ 已自选")
+                        else:
+                            if st.button("⭐ 自选", key=f"watch_{r['code']}", use_container_width=True):
+                                if add_to_watchlist(r['code'], r['name']):
+                                    st.success("已添加")
+                                    st.rerun()
                     
-                    with advice_cols[1]:
-                        st.markdown("**💰 买入价**")
+                    # 中间：买卖点详情
+                    st.markdown("---")
+                    detail_cols = st.columns(4)
+                    
+                    with detail_cols[0]:
+                        st.markdown("🎯 **建议**")
+                        st.markdown(f"{r['action']}")
+                        st.caption(r.get('suggestion', '')[:12] + "..." if len(r.get('suggestion', '')) > 12 else r.get('suggestion', ''))
+                    
+                    with detail_cols[1]:
+                        st.markdown("💰 **买入**")
                         st.markdown(f"¥{r['price']:.2f}")
                     
-                    with advice_cols[2]:
-                        st.markdown("**🛑 止损价**")
+                    with detail_cols[2]:
+                        st.markdown("🛑 **止损**")
                         if r.get('stop_loss'):
                             st.markdown(f"¥{r['stop_loss']:.2f}")
-                            st.caption(f"({r['stop_loss_pct']:+.1f}%)")
+                            st.caption(f"{r['stop_loss_pct']:+.1f}%")
+                        else:
+                            st.markdown("-")
                     
-                    with advice_cols[3]:
-                        st.markdown("**🎯 目标价**")
+                    with detail_cols[3]:
+                        st.markdown("🎯 **目标**")
                         if r.get('target_price'):
                             st.markdown(f"¥{r['target_price']:.2f}")
-                            st.caption(f"(+{r['target_pct']:.1f}%)")
+                            st.caption(f"+{r['target_pct']:.1f}%")
+                        else:
+                            st.markdown("-")
+                    
+                    st.markdown("---")
         
         # 完整数据表
         st.markdown("---")
