@@ -959,19 +959,19 @@ def main():
                     # 第二行：买卖点 - 醒目样式
                     st.markdown("""
                         <style>
-                        .trade-info-row { display: flex; gap: 8px; margin: 8px 0; }
-                        .trade-box {
+                        .trade-info-row {{ display: flex; gap: 8px; margin: 8px 0; }}
+                        .trade-box {{
                             flex: 1;
                             padding: 10px 12px;
                             border-radius: 8px;
                             font-size: 15px;
                             font-weight: 600;
-                        }
-                        .buy-box { background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); color: #2e7d32; border-left: 4px solid #4caf50; }
-                        .stop-box { background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%); color: #c62828; border-left: 4px solid #ef5350; }
-                        .target-box { background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); color: #1565c0; border-left: 4px solid #42a5f5; }
-                        .trade-label { font-size: 12px; opacity: 0.8; margin-bottom: 2px; }
-                        .trade-value { font-size: 16px; font-weight: 700; }
+                        }}
+                        .buy-box {{ background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); color: #2e7d32; border-left: 4px solid #4caf50; }}
+                        .stop-box {{ background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%); color: #c62828; border-left: 4px solid #ef5350; }}
+                        .target-box {{ background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); color: #1565c0; border-left: 4px solid #42a5f5; }}
+                        .trade-label {{ font-size: 12px; opacity: 0.8; margin-bottom: 2px; }}
+                        .trade-value {{ font-size: 16px; font-weight: 700; }}
                         </style>
                         <div class="trade-info-row">
                             <div class="trade-box buy-box">
@@ -992,14 +992,14 @@ def main():
                         r.get('stop_loss', 0), r.get('stop_loss_pct', 0),
                         r.get('target_price', 0), r.get('target_pct', 0)
                     ), unsafe_allow_html=True)
-                    with c4:
-                        watchlist = load_watchlist()
-                        if any(w['code'] == r['code'] for w in watchlist):
-                            st.caption("✅ 已自选")
-                        else:
-                            if st.button("⭐ 自选", key=f"w_{r['code']}"):
-                                add_to_watchlist(r['code'], r['name'])
-                                st.rerun()
+                    
+                    watchlist = load_watchlist()
+                    if any(w['code'] == r['code'] for w in watchlist):
+                        st.caption("✅ 已自选")
+                    else:
+                        if st.button("⭐ 自选", key=f"w_{r['code']}"):
+                            add_to_watchlist(r['code'], r['name'])
+                            st.rerun()
                     
                     st.divider()
         
@@ -1019,19 +1019,19 @@ def main():
                     # 第二行：买卖点 - 醒目样式
                     st.markdown("""
                         <style>
-                        .trade-info-row { display: flex; gap: 8px; margin: 8px 0; }
-                        .trade-box {
+                        .trade-info-row {{ display: flex; gap: 8px; margin: 8px 0; }}
+                        .trade-box {{
                             flex: 1;
                             padding: 10px 12px;
                             border-radius: 8px;
                             font-size: 15px;
                             font-weight: 600;
-                        }
-                        .buy-box { background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); color: #2e7d32; border-left: 4px solid #4caf50; }
-                        .stop-box { background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%); color: #c62828; border-left: 4px solid #ef5350; }
-                        .target-box { background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); color: #1565c0; border-left: 4px solid #42a5f5; }
-                        .trade-label { font-size: 12px; opacity: 0.8; margin-bottom: 2px; }
-                        .trade-value { font-size: 16px; font-weight: 700; }
+                        }}
+                        .buy-box {{ background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); color: #2e7d32; border-left: 4px solid #4caf50; }}
+                        .stop-box {{ background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%); color: #c62828; border-left: 4px solid #ef5350; }}
+                        .target-box {{ background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); color: #1565c0; border-left: 4px solid #42a5f5; }}
+                        .trade-label {{ font-size: 12px; opacity: 0.8; margin-bottom: 2px; }}
+                        .trade-value {{ font-size: 16px; font-weight: 700; }}
                         </style>
                         <div class="trade-info-row">
                             <div class="trade-box buy-box">
@@ -1052,14 +1052,14 @@ def main():
                         r.get('stop_loss', 0), r.get('stop_loss_pct', 0),
                         r.get('target_price', 0), r.get('target_pct', 0)
                     ), unsafe_allow_html=True)
-                    with c4:
-                        watchlist = load_watchlist()
-                        if any(w['code'] == r['code'] for w in watchlist):
-                            st.caption("✅ 已自选")
-                        else:
-                            if st.button("⭐ 自选", key=f"w_{r['code']}"):
-                                add_to_watchlist(r['code'], r['name'])
-                                st.rerun()
+                    
+                    watchlist = load_watchlist()
+                    if any(w['code'] == r['code'] for w in watchlist):
+                        st.caption("✅ 已自选")
+                    else:
+                        if st.button("⭐ 自选", key=f"w_{r['code']}"):
+                            add_to_watchlist(r['code'], r['name'])
+                            st.rerun()
                     
                     st.divider()
         
