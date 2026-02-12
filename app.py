@@ -997,7 +997,7 @@ def main():
                     if any(w['code'] == r['code'] for w in watchlist):
                         st.caption("✅ 已自选")
                     else:
-                        if st.button("⭐ 自选", key=f"w_{r['code']}"):
+                        if st.button("⭐ 自选", key=f"w_buy3_{r['code']}"):
                             add_to_watchlist(r['code'], r['name'])
                             st.rerun()
                     
@@ -1057,7 +1057,7 @@ def main():
                     if any(w['code'] == r['code'] for w in watchlist):
                         st.caption("✅ 已自选")
                     else:
-                        if st.button("⭐ 自选", key=f"w_{r['code']}"):
+                        if st.button("⭐ 自选", key=f"w_buy1_{r['code']}"):
                             add_to_watchlist(r['code'], r['name'])
                             st.rerun()
                     
