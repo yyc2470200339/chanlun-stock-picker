@@ -16,6 +16,11 @@ from datetime import datetime, timedelta
 import tushare as ts
 from pypinyin import lazy_pinyin, Style
 from PIL import Image, ImageDraw, ImageFont
+token = "eef8f02a308b9e0e62ab8b8b52518832719081eee995163be433621a0216"
+
+pro = ts.pro_api(token)
+pro._DataApi__token = token # 保证有这个代码，不然不可以获取
+pro._DataApi__http_url = 'http://lianghua.nanyangqiankun.top'  # 保证有这个代码，不然不可以获取
 
 # ========== 数据持久化 ==========
 DATA_DIR = ".streamlit_data"
