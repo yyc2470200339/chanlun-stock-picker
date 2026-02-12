@@ -332,7 +332,8 @@ st.set_page_config(
 
 # ========== Tushare初始化 ==========
 # 从环境变量读取Token（部署到云端时设置）
-TUSHARE_TOKEN = os.environ.get('TUSHARE_TOKEN', '')
+TUSHARE_TOKEN = "eef8f02a308b9e0e62ab8b8b52518832719081eee995163be433621a0216"
+#os.environ.get('TUSHARE_TOKEN', '')
 
 if not TUSHARE_TOKEN:
     st.error("⚠️ 未设置TUSHARE_TOKEN环境变量！请在Streamlit Cloud设置中添加。")
