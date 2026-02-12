@@ -14,9 +14,6 @@ import base64
 from datetime import datetime, timedelta
 import tushare as ts
 from pypinyin import lazy_pinyin, Style
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-from matplotlib.backends.backend_agg import FigureCanvasAgg
 from PIL import Image, ImageDraw, ImageFont
 
 # ========== 数据持久化 ==========
@@ -85,8 +82,77 @@ def load_analysis_history():
 
 # ========== 生成结果图片 ==========
 
+def get_chinese_font():
+    """获取中文字体路径 - 尝试多种方式，必要时下载"""
+    import platform
+    
+    # 首先检查本地缓存字体
+    data_dir = os.path.join(os.path.dirname(__file__), DATA_DIR)
+    os.makedirs(data_dir, exist_ok=True)
+    cached_font = os.path.join(data_dir, 'NotoSansCJK-Regular.otf')
+    
+    if os.path.exists(cached_font):
+        return cached_font
+    
+    # 尝试系统字体
+    font_paths = []
+    
+    if platform.system() == 'Windows':
+        font_paths = [
+            'C:/Windows/Fonts/simhei.ttf',
+            'C:/Windows/Fonts/simsun.ttc',
+            'C:/Windows/Fonts/msyh.ttc',
+            'C:/Windows/Fonts/simkai.ttf',
+            'C:/Windows/Fonts/deng.ttf',
+        ]
+    else:
+        font_paths = [
+            '/usr/share/fonts/truetype/wqy/wqy-microhei.ttc',
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+            '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+            '/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc',
+            '/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc',
+            '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+            '/System/Library/Fonts/PingFang.ttc',
+            '/System/Library/Fonts/STHeiti Light.ttc',
+            '/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf',
+            '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc',
+        ]
+    
+    for path in font_paths:
+        if os.path.exists(path):
+            return path
+    
+    # 尝试下载 Google Noto Sans CJK 字体
+    try:
+        import urllib.request
+        font_url = 'https://github.com/notofonts/noto-cjk/raw/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf'
+        
+        # 使用GitHub镜像加速
+        mirror_urls = [
+            'https://ghproxy.com/https://github.com/notofonts/noto-cjk/raw/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf',
+            'https://mirror.ghproxy.com/https://github.com/notofonts/noto-cjk/raw/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf',
+            font_url,
+        ]
+        
+        for url in mirror_urls:
+            try:
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    with open(cached_font, 'wb') as f:
+                        f.write(response.read())
+                if os.path.exists(cached_font) and os.path.getsize(cached_font) > 1000000:  # 确保文件大于1MB
+                    return cached_font
+            except:
+                continue
+                
+    except Exception:
+        pass
+    
+    return None
+
 def generate_result_image(results):
-    """生成分析结果图片 - 优化手机浏览"""
+    """生成分析结果图片 - 使用PIL确保中文正常显示"""
     if not results:
         return None
     
@@ -98,94 +164,155 @@ def generate_result_image(results):
     if not buy3 and not buy1:
         return None
     
-    # 设置中文字体 - 尝试多种字体
-    import matplotlib
-    matplotlib.rcParams['font.sans-serif'] = [
-        'SimHei', 'DejaVu Sans', 'Arial Unicode MS', 
-        'WenQuanYi Micro Hei', 'Noto Sans CJK SC'
-    ]
-    matplotlib.rcParams['axes.unicode_minus'] = False
+    # 获取字体
+    font_path = get_chinese_font()
     
-    # 计算图片高度 - 紧凑布局
+    # 图片尺寸
+    width = 800
     signal_count = len(buy3) + len(buy1)
-    fig_height = 3 + signal_count * 0.6  # 紧凑行距
+    height = 200 + signal_count * 120  # 每个信号卡片约120像素
     
-    # 创建图片 - 适合手机宽度
-    fig, ax = plt.subplots(figsize=(8, fig_height))
-    ax.axis('off')
+    # 创建白色背景图片
+    img = Image.new('RGB', (width, height), color='white')
+    draw = ImageDraw.Draw(img)
+    
+    # 尝试加载字体
+    try:
+        if font_path:
+            font_title = ImageFont.truetype(font_path, 28)
+            font_subtitle = ImageFont.truetype(font_path, 18)
+            font_stock = ImageFont.truetype(font_path, 20)
+            font_info = ImageFont.truetype(font_path, 16)
+            font_small = ImageFont.truetype(font_path, 12)
+        else:
+            raise IOError("No Chinese font found")
+    except:
+        # 使用默认字体（可能不支持中文）
+        font_title = ImageFont.load_default()
+        font_subtitle = font_title
+        font_stock = font_title
+        font_info = font_title
+        font_small = font_title
     
     # 颜色定义
-    color_title = '#1f77b4'
-    color_green = '#2ecc71'
-    color_orange = '#f39c12'
+    color_title = '#2c3e50'
+    color_green = '#27ae60'
+    color_orange = '#e67e22'
     color_gray = '#7f8c8d'
     color_dark = '#2c3e50'
+    color_red = '#e74c3c'
+    color_bg_green = '#e8f5e9'
+    color_bg_orange = '#fff3e0'
+    
+    y_pos = 20
     
     # 标题
-    fig.text(0.5, 0.98, '缠论选股分析结果', ha='center', va='top', 
-             fontsize=16, fontweight='bold', color=color_title)
-    fig.text(0.5, 0.95, datetime.now().strftime('%Y-%m-%d %H:%M'), 
-             ha='center', va='top', fontsize=9, color=color_gray)
+    draw.text((width//2, y_pos), '缠论选股分析结果', fill=color_title, font=font_title, anchor='mm')
+    y_pos += 40
     
-    # 统计信息 - 紧凑排列
-    y_pos = 0.92
+    # 时间
+    time_str = datetime.now().strftime('%Y-%m-%d %H:%M')
+    draw.text((width//2, y_pos), time_str, fill=color_gray, font=font_small, anchor='mm')
+    y_pos += 30
+    
+    # 统计信息
     stats_text = f'分析:{len(results)}只 | 三买:{len(buy3)}只 | 一买:{len(buy1)}只'
-    fig.text(0.5, y_pos, stats_text, ha='center', va='top', 
-             fontsize=10, color=color_dark)
+    draw.text((width//2, y_pos), stats_text, fill=color_dark, font=font_subtitle, anchor='mm')
+    y_pos += 40
     
-    y_pos -= 0.06
+    def draw_rounded_rect(draw, xy, radius, fill, outline=None, width=1):
+        """绘制圆角矩形"""
+        x1, y1, x2, y2 = xy
+        draw.rounded_rectangle(xy, radius=radius, fill=fill, outline=outline, width=width)
     
     # 三买股票
     if buy3:
-        fig.text(0.05, y_pos, '【三买信号-强势突破】', fontsize=11, 
-                fontweight='bold', color=color_green)
-        y_pos -= 0.04
+        draw.text((40, y_pos), '【三买信号-强势突破】', fill=color_green, font=font_stock)
+        y_pos += 35
         
         for r in buy3:
-            # 股票信息 - 单行紧凑显示
-            line1 = f"{r['code']} {r['name']}  ¥{r['price']:.2f} ({r['change']:+.1f}%)"
-            fig.text(0.05, y_pos, line1, fontsize=10, fontweight='bold', color=color_dark)
-            y_pos -= 0.025
+            # 绘制卡片背景
+            card_margin = 30
+            card_height = 90
+            draw.rounded_rectangle(
+                [card_margin, y_pos, width - card_margin, y_pos + card_height],
+                radius=10, fill=color_bg_green, outline='#c8e6c9', width=2
+            )
             
-            # 买卖点 - 简化显示
-            stop_str = f"¥{r.get('stop_loss', 0):.1f}({r.get('stop_loss_pct', 0):+.0f}%)" if r.get('stop_loss') else "-"
-            target_str = f"¥{r.get('target_price', 0):.1f}(+{r.get('target_pct', 0):.0f}%)" if r.get('target_price') else "-"
-            line2 = f"    买入:¥{r['price']:.1f} → 止损:{stop_str} → 目标:{target_str}"
-            fig.text(0.05, y_pos, line2, fontsize=8, color=color_gray)
-            y_pos -= 0.03
+            # 股票信息
+            price_color = color_red if r['change'] > 0 else color_green
+            line1 = f"{r['code']} {r['name']}   ¥{r['price']:.2f} ({r['change']:+.1f}%)"
+            draw.text((card_margin + 15, y_pos + 10), line1, fill=color_dark, font=font_stock)
+            
+            # 买卖点信息 - 三列布局
+            info_y = y_pos + 45
+            col_width = (width - 2 * card_margin - 30) // 3
+            
+            # 买入
+            buy_text = f"买入: ¥{r['price']:.1f}"
+            draw.text((card_margin + 15, info_y), buy_text, fill=color_green, font=font_info)
+            
+            # 止损
+            if r.get('stop_loss'):
+                stop_text = f"止损: ¥{r.get('stop_loss', 0):.1f} ({r.get('stop_loss_pct', 0):+.0f}%)"
+                draw.text((card_margin + 15 + col_width, info_y), stop_text, fill=color_red, font=font_info)
+            
+            # 目标
+            if r.get('target_price'):
+                target_text = f"目标: ¥{r.get('target_price', 0):.1f} (+{r.get('target_pct', 0):.0f}%)"
+                draw.text((card_margin + 15 + col_width * 2, info_y), target_text, fill='#1976d2', font=font_info)
+            
+            y_pos += card_height + 15
     
     # 一买股票
     if buy1:
-        y_pos -= 0.01
-        fig.text(0.05, y_pos, '【一买信号-底部反转】', fontsize=11, 
-                fontweight='bold', color=color_orange)
-        y_pos -= 0.04
+        y_pos += 10
+        draw.text((40, y_pos), '【一买信号-底部反转】', fill=color_orange, font=font_stock)
+        y_pos += 35
         
         for r in buy1:
-            # 股票信息
-            line1 = f"{r['code']} {r['name']}  ¥{r['price']:.2f} ({r['change']:+.1f}%)"
-            fig.text(0.05, y_pos, line1, fontsize=10, fontweight='bold', color=color_dark)
-            y_pos -= 0.025
+            # 绘制卡片背景
+            card_margin = 30
+            card_height = 90
+            draw.rounded_rectangle(
+                [card_margin, y_pos, width - card_margin, y_pos + card_height],
+                radius=10, fill=color_bg_orange, outline='#ffe0b2', width=2
+            )
             
-            # 买卖点
-            stop_str = f"¥{r.get('stop_loss', 0):.1f}({r.get('stop_loss_pct', 0):+.0f}%)" if r.get('stop_loss') else "-"
-            target_str = f"¥{r.get('target_price', 0):.1f}(+{r.get('target_pct', 0):.0f}%)" if r.get('target_price') else "-"
-            line2 = f"    买入:¥{r['price']:.1f} → 止损:{stop_str} → 目标:{target_str}"
-            fig.text(0.05, y_pos, line2, fontsize=8, color=color_gray)
-            y_pos -= 0.03
+            # 股票信息
+            price_color = color_red if r['change'] > 0 else color_green
+            line1 = f"{r['code']} {r['name']}   ¥{r['price']:.2f} ({r['change']:+.1f}%)"
+            draw.text((card_margin + 15, y_pos + 10), line1, fill=color_dark, font=font_stock)
+            
+            # 买卖点信息
+            info_y = y_pos + 45
+            col_width = (width - 2 * card_margin - 30) // 3
+            
+            # 买入
+            buy_text = f"买入: ¥{r['price']:.1f}"
+            draw.text((card_margin + 15, info_y), buy_text, fill=color_green, font=font_info)
+            
+            # 止损
+            if r.get('stop_loss'):
+                stop_text = f"止损: ¥{r.get('stop_loss', 0):.1f} ({r.get('stop_loss_pct', 0):+.0f}%)"
+                draw.text((card_margin + 15 + col_width, info_y), stop_text, fill=color_red, font=font_info)
+            
+            # 目标
+            if r.get('target_price'):
+                target_text = f"目标: ¥{r.get('target_price', 0):.1f} (+{r.get('target_pct', 0):.0f}%)"
+                draw.text((card_margin + 15 + col_width * 2, info_y), target_text, fill='#1976d2', font=font_info)
+            
+            y_pos += card_height + 15
     
     # 风险提示
-    y_pos -= 0.02
-    fig.text(0.5, max(y_pos, 0.02), 
-             '风险提示:以上分析仅供参考，不构成投资建议。', 
-             ha='center', fontsize=7, color='#e74c3c', style='italic')
+    y_pos += 20
+    warning = '风险提示：以上分析仅供参考，不构成投资建议。'
+    draw.text((width//2, y_pos), warning, fill='#e74c3c', font=font_small, anchor='mm')
     
-    # 保存为图片 - 高DPI保证清晰度
+    # 保存为图片
     buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=200, bbox_inches='tight', 
-                facecolor='white', edgecolor='none', pad_inches=0.1)
+    img.save(buf, format='PNG', quality=95)
     buf.seek(0)
-    plt.close()
     
     return buf
 
@@ -508,26 +635,81 @@ def analyze_stock(symbol, name, days=90):
         return None
 
 def get_concept_stocks(concept_name):
-    """获取板块成分股"""
+    """获取板块成分股 - 支持申万行业和概念板块"""
     try:
-        concepts = pro.concept()
-        matched = concepts[concepts['name'].str.contains(concept_name, na=False, case=False)]
-        
-        if matched.empty:
+        # 跳过分隔符选项
+        if concept_name.startswith("==="):
             return None
+            
+        # 1. 先尝试概念板块（同花顺/东方财富概念）
+        try:
+            concepts = pro.concept()
+            matched = concepts[concepts['name'].str.contains(concept_name, na=False, case=False)]
+            
+            if not matched.empty:
+                concept_code = matched.iloc[0]['code']
+                detail = pro.concept_detail(id=concept_code, fields='ts_code,name')
+                
+                if detail is not None and not detail.empty:
+                    stock_list = []
+                    for _, row in detail.iterrows():
+                        symbol = row['ts_code'].split('.')[0]
+                        stock_list.append((symbol, row['name']))
+                    return stock_list
+        except:
+            pass
         
-        concept_code = matched.iloc[0]['code']
-        detail = pro.concept_detail(id=concept_code, fields='ts_code,name')
+        # 2. 尝试申万行业分类
+        try:
+            # 获取申万一级行业列表
+            sw_index = pro.index_classify(level='L1', src='SW2021')
+            if sw_index is not None and not sw_index.empty:
+                # 模糊匹配行业名称
+                matched = sw_index[sw_index['industry_name'].str.contains(concept_name, na=False, case=False)]
+                if matched.empty:
+                    # 尝试精确匹配
+                    matched = sw_index[sw_index['industry_name'] == concept_name]
+                
+                if not matched.empty:
+                    industry_code = matched.iloc[0]['index_code']
+                    # 获取行业成分股
+                    members = pro.index_member(index_code=industry_code, fields='con_code,con_name')
+                    if members is not None and not members.empty:
+                        stock_list = []
+                        for _, row in members.iterrows():
+                            symbol = row['con_code'].split('.')[0]
+                            stock_list.append((symbol, row['con_name']))
+                        return stock_list
+        except:
+            pass
         
-        if detail is None or detail.empty:
-            return None
+        # 3. 尝试申万二级行业（如果一级没找到）
+        try:
+            sw_index2 = pro.index_classify(level='L2', src='SW2021')
+            if sw_index2 is not None and not sw_index2.empty:
+                matched = sw_index2[sw_index2['industry_name'].str.contains(concept_name, na=False, case=False)]
+                if not matched.empty:
+                    industry_code = matched.iloc[0]['index_code']
+                    members = pro.index_member(index_code=industry_code, fields='con_code,con_name')
+                    if members is not None and not members.empty:
+                        stock_list = []
+                        for _, row in members.iterrows():
+                            symbol = row['con_code'].split('.')[0]
+                            stock_list.append((symbol, row['con_name']))
+                        return stock_list
+        except:
+            pass
+            
+        # 4. 尝试标准行业分类（证监会行业）
+        try:
+            stock_list_data = pro.stock_company(fields='ts_code,chairman,manager,secretary,reg_capital,setup_date,province,city,website,email,office,employees,main_business,business_scope')
+            if stock_list_data is not None and not stock_list_data.empty:
+                # 这里可以根据业务范围筛选，但比较复杂，暂时跳过
+                pass
+        except:
+            pass
         
-        stock_list = []
-        for _, row in detail.iterrows():
-            symbol = row['ts_code'].split('.')[0]
-            stock_list.append((symbol, row['name']))
-        
-        return stock_list
+        return None
     except:
         return None
 
@@ -599,9 +781,66 @@ def main():
         st.sidebar.markdown("---")
         st.sidebar.subheader("🔍 板块自动扫描")
         
-        # 常用概念列表
-        common_concepts = ["光纤", "芯片", "人工智能", "新能源", "半导体", "军工", "医药", "白酒", "银行", "证券"]
-        concept_name = st.sidebar.selectbox("选择概念板块", common_concepts)
+        # 常用概念列表 - 申万行业分类 + 热门概念
+        # 申万一级行业（2021版）31个行业分类
+        sw_industries = [
+            # 上游资源
+            "煤炭", "石油石化", "有色金属", "钢铁",
+            # 中游制造  
+            "基础化工", "建筑材料", "建筑装饰", "电力设备", "机械设备", "国防军工",
+            # 下游消费
+            "汽车", "家用电器", "纺织服饰", "轻工制造", "医药生物", "食品饮料", 
+            "农林牧渔", "商贸零售", "社会服务",
+            # 大金融
+            "银行", "非银金融", "房地产",
+            # TMT
+            "电子", "计算机", "通信", "传媒",
+            # 公用事业 & 环保
+            "公用事业", "交通运输", "环保",
+            # 其他
+            "综合"
+        ]
+        
+        # 热门概念板块（市场热点）
+        hot_concepts = [
+            "芯片", "半导体", "人工智能", "新能源", "光伏", "储能",
+            "5G", "云计算", "大数据", "区块链", "元宇宙",
+            "新能源汽车", "锂电池", "特斯拉", "比亚迪",
+            "军工", "航天", "航母",
+            "医药", "创新药", "医疗器械", "CRO",
+            "白酒", "食品", "预制菜",
+            "银行", "证券", "保险", "金融科技",
+            "稀土", "石墨烯", "碳纤维",
+            "数字货币", "国产软件", "网络安全",
+            "工业互联网", "智能制造", "机器人",
+            "充电桩", "氢能源", "燃料电池",
+            "医美", "化妆品", "宠物经济",
+            "养老", "三胎", "教育",
+            "碳中和", "垃圾分类", "污水处理",
+            "一带一路", "京津冀", "长三角", "粤港澳大湾区",
+            "新材料", "3D打印", "纳米技术",
+            "量子计算", "边缘计算", "算力",
+            "卫星导航", "北斗", "通信设备",
+            "游戏", "影视", "动漫", "短视频",
+            "电子商务", "直播带货", "社区团购",
+            "快递", "物流", "冷链",
+            "有色·铜", "有色·铝", "黄金", "白银",
+            "农业", "养殖", "种植", "化肥",
+            "电力", "风电", "水电", "核电", "火电",
+            "玻璃", "水泥", "钢铁", "煤炭",
+            "纺织", "服装", "家纺", "鞋帽",
+            "家具", "造纸", "包装", "印刷",
+            "工程机械", "重型机械", "专用设备",
+            "航空", "船舶", "轨道交通",
+            "石油", "天然气", "页岩气",
+            "化工", "塑料", "橡胶", "化纤",
+            "建材", "装修", "装配式建筑"
+        ]
+        
+        # 合并所有选项，按类别分组
+        concept_options = ["=== 申万一级行业 ==="] + sw_industries + ["=== 热门概念 ==="] + hot_concepts
+        
+        concept_name = st.sidebar.selectbox("选择概念板块", concept_options)
         
         if st.sidebar.button("🔄 获取成分股"):
             with st.spinner(f"正在获取 {concept_name} 板块成分股..."):
@@ -716,18 +955,42 @@ def main():
                     with cols[1]:
                         st.success("买入", icon="🚀")
                     
-                    # 第二行：买卖点（紧凑2x2网格）
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        st.caption(f"💰 买入: ¥{r['price']:.2f}")
-                    with c2:
-                        if r.get('target_price'):
-                            st.caption(f"🎯 目标: ¥{r['target_price']:.1f} (+{r['target_pct']:.0f}%)")
-                    
-                    c3, c4 = st.columns(2)
-                    with c3:
-                        if r.get('stop_loss'):
-                            st.caption(f"🛑 止损: ¥{r['stop_loss']:.1f} ({r['stop_loss_pct']:+.0f}%)")
+                    # 第二行：买卖点 - 醒目样式
+                    st.markdown("""
+                        <style>
+                        .trade-info-row { display: flex; gap: 8px; margin: 8px 0; }
+                        .trade-box {
+                            flex: 1;
+                            padding: 10px 12px;
+                            border-radius: 8px;
+                            font-size: 15px;
+                            font-weight: 600;
+                        }
+                        .buy-box { background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); color: #2e7d32; border-left: 4px solid #4caf50; }
+                        .stop-box { background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%); color: #c62828; border-left: 4px solid #ef5350; }
+                        .target-box { background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); color: #1565c0; border-left: 4px solid #42a5f5; }
+                        .trade-label { font-size: 12px; opacity: 0.8; margin-bottom: 2px; }
+                        .trade-value { font-size: 16px; font-weight: 700; }
+                        </style>
+                        <div class="trade-info-row">
+                            <div class="trade-box buy-box">
+                                <div class="trade-label">💰 买入</div>
+                                <div class="trade-value">¥{:.2f}</div>
+                            </div>
+                            <div class="trade-box stop-box">
+                                <div class="trade-label">🛑 止损</div>
+                                <div class="trade-value">¥{:.1f} ({:+.0f}%)</div>
+                            </div>
+                            <div class="trade-box target-box">
+                                <div class="trade-label">🎯 目标</div>
+                                <div class="trade-value">¥{:.1f} (+{:.0f}%)</div>
+                            </div>
+                        </div>
+                    """.format(
+                        r['price'],
+                        r.get('stop_loss', 0), r.get('stop_loss_pct', 0),
+                        r.get('target_price', 0), r.get('target_pct', 0)
+                    ), unsafe_allow_html=True)
                     with c4:
                         watchlist = load_watchlist()
                         if any(w['code'] == r['code'] for w in watchlist):
@@ -752,18 +1015,42 @@ def main():
                     with cols[1]:
                         st.warning("关注", icon="📉")
                     
-                    # 第二行
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        st.caption(f"💰 买入: ¥{r['price']:.2f}")
-                    with c2:
-                        if r.get('target_price'):
-                            st.caption(f"🎯 目标: ¥{r['target_price']:.1f} (+{r['target_pct']:.0f}%)")
-                    
-                    c3, c4 = st.columns(2)
-                    with c3:
-                        if r.get('stop_loss'):
-                            st.caption(f"🛑 止损: ¥{r['stop_loss']:.1f} ({r['stop_loss_pct']:.0f}%)")
+                    # 第二行：买卖点 - 醒目样式
+                    st.markdown("""
+                        <style>
+                        .trade-info-row { display: flex; gap: 8px; margin: 8px 0; }
+                        .trade-box {
+                            flex: 1;
+                            padding: 10px 12px;
+                            border-radius: 8px;
+                            font-size: 15px;
+                            font-weight: 600;
+                        }
+                        .buy-box { background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); color: #2e7d32; border-left: 4px solid #4caf50; }
+                        .stop-box { background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%); color: #c62828; border-left: 4px solid #ef5350; }
+                        .target-box { background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); color: #1565c0; border-left: 4px solid #42a5f5; }
+                        .trade-label { font-size: 12px; opacity: 0.8; margin-bottom: 2px; }
+                        .trade-value { font-size: 16px; font-weight: 700; }
+                        </style>
+                        <div class="trade-info-row">
+                            <div class="trade-box buy-box">
+                                <div class="trade-label">💰 买入</div>
+                                <div class="trade-value">¥{:.2f}</div>
+                            </div>
+                            <div class="trade-box stop-box">
+                                <div class="trade-label">🛑 止损</div>
+                                <div class="trade-value">¥{:.1f} ({:+.0f}%)</div>
+                            </div>
+                            <div class="trade-box target-box">
+                                <div class="trade-label">🎯 目标</div>
+                                <div class="trade-value">¥{:.1f} (+{:.0f}%)</div>
+                            </div>
+                        </div>
+                    """.format(
+                        r['price'],
+                        r.get('stop_loss', 0), r.get('stop_loss_pct', 0),
+                        r.get('target_price', 0), r.get('target_pct', 0)
+                    ), unsafe_allow_html=True)
                     with c4:
                         watchlist = load_watchlist()
                         if any(w['code'] == r['code'] for w in watchlist):
